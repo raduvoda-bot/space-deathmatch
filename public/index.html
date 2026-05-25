@@ -170,10 +170,8 @@ const MOVE_DUR=2000,MAX_DUR=7000;
 function getRoomCode(){
   const params=new URLSearchParams(location.search);
   if(params.get('room'))return params.get('room');
-  // Generam cod nou random
   const code=Math.random().toString(36).substring(2,8).toUpperCase();
-  const newUrl=location.origin+location.pathname+'?room='+code;
-  window.history.replaceState({},'',newUrl);
+  try{ window.history.replaceState({},'',location.pathname+'?room='+code); }catch(e){}
   return code;
 }
 const ROOM_CODE=getRoomCode();
