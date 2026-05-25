@@ -310,7 +310,7 @@ document.getElementById('btn-ready').addEventListener('click',()=>{
 // ══════════════════════════════════════════
 const canvas=document.getElementById('arena');
 const ctx=canvas.getContext('2d');
-const W=canvas.width,H=canvas.height; // canvas e 500x400 in portrait layout
+const W=canvas.width,H=canvas.height;
 
 let gameActive=false;
 let ships=[];         // array de nave in joc
@@ -320,12 +320,14 @@ let mySpecialUsed=false;
 let inputSubmitted=false;
 let currentTurn=1;
 
-function startGameClient(msg){
+async function startGameClient(msg){
   document.getElementById('screen-lobby').style.display='none';
   document.getElementById('screen-game').style.display='block';
   gameActive=true;
   particles=[];
   mySpecialUsed=false;
+  // Asteptam un frame ca DOM-ul sa fie randat inainte de initJoysticks
+  await new Promise(r => setTimeout(r, 50));
 
   // Construim navele in ordinea jucatorilor
   ships=msg.players.map((p,i)=>({
@@ -343,32 +345,26 @@ function startGameClient(msg){
   myShipIndex=ships.findIndex(s=>s.id===myId);
   currentTurn=1;
   setupInputPanel();
-  initJoysticks();
   showInputPhase();
-  renderStatic();
+  setTimeout(()=>{ initJoysticks(); renderStatic(); }, 80);
 }
 
 function setupInputPanel(){
   if(myShipIndex<0)return;
   const s=ships[myShipIndex];
-  document.getElementById('panel-title').textContent=`${s.name} — HP: ${s.hp}/${s.maxHp}`;
-  document.getElementById('panel-title').style.color=s.color;
-  const atkL={BC:'Laser (35 dmg)',CAR:'Interceptoare 5×',WRA:'2× Rachete',COR:'5 Orbe electrice'};
-  const spL ={BC:'Yamato AOE (55 dmg)',CAR:'Plasma AOE (45 dmg)',WRA:'Invizibilitate 2 ture',COR:'Speed Boost 2×'};
-  document.getElementById('i-shoot-lbl').textContent=atkL[s.type]||'Atac';
-  document.getElementById('i-special-lbl').textContent=spL[s.type]||'Special';
-  document.getElementById('i-adir-lbl').textContent={BC:'Direcție laser',CAR:'Direcție interceptoare',WRA:'Direcție rachete',COR:'Direcție orbe'}[s.type]||'Direcție';
-  document.getElementById('atk-title').textContent='Atac — '+s.name;
-  document.getElementById('i-sdir-row').style.display=(s.type==='WRA'||s.type==='COR')?'none':'flex';
-  const spdInput=document.getElementById('i-spd');
-  spdInput.max=s.maxSpd; spdInput.value=Math.round(s.maxSpd*0.5);
-  document.getElementById('i-spd-v').textContent=spdInput.value;
+  // Panel title mini (in joy-bar)
+  const mini=document.getElementById('panel-title-mini');
+  if(mini){mini.textContent=`${s.name} — ${s.hp}HP`;mini.style.color=s.color;}
+  // panel-title (poate exista sau nu)
+  const pt=document.getElementById('panel-title');
+  if(pt){pt.textContent=`${s.name} — HP: ${s.hp}/${s.maxHp}`;pt.style.color=s.color;}
   updateSpecialBadge();
 }
 
 function updateSpecialBadge(){
   const badge=document.getElementById('special-badge');
   const spBtn=document.getElementById('btn-special');
+  if(!badge)return;
   if(mySpecialUsed){
     badge.textContent='Folosit';badge.className='badge used';
     if(spBtn){spBtn.disabled=true;spBtn.classList.remove('active');}
@@ -384,26 +380,24 @@ function showInputPhase(){
   joyState.shoot=true; joyState.special=false;
   joyState.move={dir:0,spd:0}; joyState.atk={dir:0};
   const bsp=document.getElementById('btn-special');if(bsp)bsp.classList.remove('active');
-  document.getElementById('btn-submit').disabled=false;
-  document.getElementById('input-panel').style.display='block';
-  document.getElementById('waiting-banner').style.display='none';
-  document.getElementById('phase-banner').textContent=`Tura ${currentTurn} — Introdu mișcarea ta`;
-  document.getElementById('phase-banner').style.color=myShipIndex>=0?ships[myShipIndex].color:'#fff';
+  const bsub=document.getElementById('btn-submit');if(bsub)bsub.disabled=false;
+  const ip=document.getElementById('input-panel');if(ip)ip.style.display='block';
+  const wb=document.getElementById('waiting-banner');if(wb)wb.style.display='none';
+  const pb=document.getElementById('phase-banner');
+  if(pb){pb.textContent=`Tura ${currentTurn} — Introdu mișcarea ta`;pb.style.color=myShipIndex>=0?ships[myShipIndex].color:'#fff';}
   if(myShipIndex>=0){
     const s=ships[myShipIndex];
     const mini=document.getElementById('panel-title-mini');
-    if(mini)mini.textContent=`${s.name} — HP: ${Math.round(s.hp)}/${s.maxHp}`;
-    mini.style.color=s.color;
-    document.getElementById('panel-title').textContent=`${s.name} — HP: ${Math.round(s.hp)}/${s.maxHp}`;
+    if(mini){mini.textContent=`${s.name} — ${Math.round(s.hp)}HP`;mini.style.color=s.color;}
   }
-  // Reinitializam joystick-urile
-  initJoysticks();
+  setTimeout(initJoysticks, 30);
 }
 
 function showWaitingPhase(){
-  document.getElementById('phase-banner').textContent=`Tura ${currentTurn} — Mișcare trimisă ✓`;
-  document.getElementById('input-panel').style.display='none';
-  document.getElementById('waiting-banner').style.display='block';
+  const pb=document.getElementById('phase-banner');
+  if(pb){pb.textContent=`Tura ${currentTurn} — Mișcare trimisă ✓`;pb.style.color='#44cc88';}
+  const ip=document.getElementById('input-panel');if(ip)ip.style.display='none';
+  const wb=document.getElementById('waiting-banner');if(wb)wb.style.display='block';
 }
 
 // btn-submit handled in initJoysticks
@@ -493,6 +487,12 @@ function setupJoystick(canvasId, onUpdate) {
 }
 
 function initJoysticks() {
+  // Verificam ca elementele exista
+  if (!document.getElementById('joy-move') || !document.getElementById('joy-atk')) {
+    console.warn('Joystick elements not found, retrying...');
+    setTimeout(initJoysticks, 100);
+    return;
+  }
   // Shoot e mereu true — tragem implicit
   joyState.shoot = true;
 
