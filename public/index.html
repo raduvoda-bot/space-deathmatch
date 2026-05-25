@@ -105,26 +105,30 @@ input[type=checkbox]{width:14px;height:14px;cursor:pointer;}
     <div id="input-panel">
       <div class="panel-title" id="panel-title">—</div>
       <!-- JOYSTICK UI -->
+      <div id="panel-title-mini" style="font-size:12px;font-weight:600;text-align:center;margin-bottom:6px;color:#fff;">—</div>
       <div id="joystick-area">
+        <!-- STANGA: miscare + buton Trage -->
         <div class="joy-section">
           <div class="joy-label">MIȘCARE</div>
           <div class="joy-wrap">
             <canvas id="joy-move" width="130" height="130"></canvas>
           </div>
-          <div class="joy-vals" id="joy-move-vals">Dir: 0° | Vit: 0</div>
+          <div class="joy-vals" id="joy-move-vals">↕ trage pentru direcție</div>
+          <button id="btn-shoot" class="joy-btn" style="margin-top:6px;width:130px;">🎯 Trage</button>
         </div>
-        <div class="joy-buttons">
-          <div class="panel-title" id="panel-title-mini" style="font-size:11px;margin-bottom:8px;text-align:center;">—</div>
-          <button id="btn-shoot" class="joy-btn">🎯 Trage</button>
-          <button id="btn-special" class="joy-btn special-btn">⚡ Special <span class="badge" id="special-badge">1×</span></button>
-          <button id="btn-submit" class="joy-btn confirm-btn">✓ Confirmă</button>
+        <!-- CENTRU: Confirma -->
+        <div class="joy-center">
+          <button id="btn-submit" class="joy-btn confirm-btn">✓<br>Trimite</button>
+          <button id="btn-special" class="joy-btn special-btn" style="margin-top:8px;">⚡<br>Special<br><span class="badge" id="special-badge">1×</span></button>
         </div>
+        <!-- DREAPTA: atac -->
         <div class="joy-section">
-          <div class="joy-label">ATAC</div>
-          <div class="joy-wrap">
+          <div class="joy-label">DIRECȚIE ATAC</div>
+          <div class="joy-wrap" id="joy-atk-wrap" style="opacity:0.35">
             <canvas id="joy-atk" width="130" height="130"></canvas>
           </div>
-          <div class="joy-vals" id="joy-atk-vals">Dir: 0°</div>
+          <div class="joy-vals" id="joy-atk-vals">activează Trage mai întâi</div>
+          <button id="btn-special-dummy" style="margin-top:6px;width:130px;visibility:hidden;" class="joy-btn">—</button>
         </div>
       </div>
       <!-- hidden inputs pastrate pentru compatibilitate cu logica existenta -->
@@ -376,9 +380,11 @@ function showInputPhase(){
   inputSubmitted=false;
   // Reset joystick state
   joyState.shoot=false; joyState.special=false;
-  joyState.move={dir:0,spd:0,active:false}; joyState.atk={dir:0,active:false};
-  document.getElementById('btn-shoot').classList.remove('active');
-  document.getElementById('btn-special').classList.remove('active');
+  joyState.move={dir:0,spd:0}; joyState.atk={dir:0};
+  const bsh=document.getElementById('btn-shoot');if(bsh)bsh.classList.remove('active');
+  const bsp=document.getElementById('btn-special');if(bsp)bsp.classList.remove('active');
+  const aw=document.getElementById('joy-atk-wrap');if(aw)aw.style.opacity='0.35';
+  const av=document.getElementById('joy-atk-vals');if(av)av.textContent='activează Trage mai întâi';
   document.getElementById('btn-submit').disabled=false;
   document.getElementById('input-panel').style.display='block';
   document.getElementById('waiting-banner').style.display='none';
@@ -423,31 +429,42 @@ const joyState = {
   special: false,
 };
 
-function setupJoystick(canvasId, onUpdate, opts={}) {
+function setupJoystick(canvasId, onUpdate) {
   const cv = document.getElementById(canvasId);
   if (!cv) return;
   const cx = cv.width/2, cy = cv.height/2;
   const maxR = cv.width/2 - 10;
-  let touching = false, kx = cx, ky = cy;
+  let touching = false;
+  // Knob starts at center
+  let kx = cx, ky = cy;
+  let lastDeg = 0, lastPct = 0;
 
-  function draw(nx, ny) {
+  function draw(nx, ny, active) {
     const c = cv.getContext('2d');
     c.clearRect(0, 0, cv.width, cv.height);
     // Outer ring
     c.beginPath(); c.arc(cx, cy, maxR, 0, Math.PI*2);
-    c.strokeStyle = 'rgba(100,160,255,0.3)'; c.lineWidth = 2; c.stroke();
+    c.strokeStyle = active ? 'rgba(100,180,255,0.6)' : 'rgba(100,160,255,0.25)';
+    c.lineWidth = 2; c.stroke();
     c.fillStyle = 'rgba(20,40,80,0.5)'; c.fill();
-    // Direction line
-    if (touching) {
-      c.beginPath(); c.moveTo(cx, cy); c.lineTo(nx, ny);
-      c.strokeStyle = 'rgba(100,180,255,0.5)'; c.lineWidth = 1.5; c.stroke();
+    // Center dot
+    c.beginPath(); c.arc(cx, cy, 3, 0, Math.PI*2);
+    c.fillStyle = 'rgba(100,160,255,0.4)'; c.fill();
+    // Direction line from center to knob
+    c.beginPath(); c.moveTo(cx, cy); c.lineTo(nx, ny);
+    c.strokeStyle = 'rgba(100,180,255,0.4)'; c.lineWidth = 1.5; c.stroke();
+    // Knob outer glow
+    if (active) {
+      c.beginPath(); c.arc(nx, ny, 22, 0, Math.PI*2);
+      c.fillStyle = 'rgba(80,140,255,0.15)'; c.fill();
     }
     // Knob
     c.beginPath(); c.arc(nx, ny, 18, 0, Math.PI*2);
-    c.fillStyle = touching ? 'rgba(80,160,255,0.9)' : 'rgba(60,100,180,0.7)';
+    c.fillStyle = active ? 'rgba(80,160,255,0.95)' : 'rgba(60,100,180,0.55)';
     c.fill();
     c.beginPath(); c.arc(nx, ny, 10, 0, Math.PI*2);
-    c.fillStyle = 'rgba(180,220,255,0.6)'; c.fill();
+    c.fillStyle = active ? 'rgba(200,230,255,0.9)' : 'rgba(150,180,220,0.5)';
+    c.fill();
   }
 
   function getPos(e) {
@@ -463,58 +480,61 @@ function setupJoystick(canvasId, onUpdate, opts={}) {
     const angle = Math.atan2(dy, dx);
     kx = cx + Math.cos(angle) * clamped;
     ky = cy + Math.sin(angle) * clamped;
-    const pct = clamped / maxR;
-    const deg = ((angle * 180 / Math.PI) + 360) % 360;
-    draw(kx, ky);
-    onUpdate(deg, pct, true);
+    lastDeg = ((angle * 180 / Math.PI) + 360) % 360;
+    lastPct = clamped / maxR;
+    draw(kx, ky, true);
+    onUpdate(lastDeg, lastPct);
   }
 
-  function reset() {
-    touching = false; kx = cx; ky = cy;
-    draw(cx, cy);
-    onUpdate(0, 0, false);
+  function release() {
+    // NU resetam pozitia — ramanem pe ultima directie setata
+    touching = false;
+    draw(kx, ky, false); // knob ramane unde e, dar fara glow activ
   }
 
-  draw(cx, cy);
+  draw(cx, cy, false);
 
   cv.addEventListener('touchstart', e => { e.preventDefault(); touching = true; update(getPos(e).x, getPos(e).y); }, {passive:false});
   cv.addEventListener('touchmove',  e => { e.preventDefault(); if(touching) update(getPos(e).x, getPos(e).y); }, {passive:false});
-  cv.addEventListener('touchend',   e => { e.preventDefault(); reset(); }, {passive:false});
+  cv.addEventListener('touchend',   e => { e.preventDefault(); release(); }, {passive:false});
   cv.addEventListener('mousedown',  e => { touching = true; update(getPos(e).x, getPos(e).y); });
   cv.addEventListener('mousemove',  e => { if(touching) update(getPos(e).x, getPos(e).y); });
-  cv.addEventListener('mouseup',    () => reset());
-  cv.addEventListener('mouseleave', () => { if(touching) reset(); });
+  cv.addEventListener('mouseup',    () => release());
+  cv.addEventListener('mouseleave', () => { if(touching) release(); });
 }
 
 function initJoysticks() {
-  setupJoystick('joy-move', (deg, pct, active) => {
+  setupJoystick('joy-move', (deg, pct) => {
     const s = myShipIndex >= 0 ? ships[myShipIndex] : null;
     const maxSpd = s ? s.maxSpd : 80;
     joyState.move.dir = Math.round(deg);
     joyState.move.spd = Math.round(pct * maxSpd);
-    joyState.move.active = active;
     document.getElementById('i-dir').value = joyState.move.dir;
     document.getElementById('i-spd').value = joyState.move.spd;
     const valsEl = document.getElementById('joy-move-vals');
-    if (valsEl) valsEl.textContent = active ? `Dir: ${joyState.move.dir}° | Vit: ${joyState.move.spd}` : 'Trage pentru a seta';
+    if (valsEl) valsEl.textContent = pct > 0.05 ? `Dir: ${joyState.move.dir}° | Vit: ${joyState.move.spd}` : '↕ trage pentru direcție';
     if (gameActive && !inputSubmitted) renderStatic();
   });
 
-  setupJoystick('joy-atk', (deg, pct, active) => {
+  setupJoystick('joy-atk', (deg, pct) => {
     joyState.atk.dir = Math.round(deg);
-    joyState.atk.active = active;
     document.getElementById('i-adir').value = joyState.atk.dir;
     document.getElementById('i-sdir').value = joyState.atk.dir;
     const valsEl = document.getElementById('joy-atk-vals');
-    if (valsEl) valsEl.textContent = active ? `Dir: ${joyState.atk.dir}°` : 'Trage pentru a viza';
+    if (valsEl) valsEl.textContent = `Dir: ${joyState.atk.dir}°`;
     if (gameActive && !inputSubmitted) renderStatic();
   });
 
-  // Shoot button
+  // Shoot button — toggle, activeaza/dezactiveaza joystick atac
   document.getElementById('btn-shoot').addEventListener('click', () => {
     joyState.shoot = !joyState.shoot;
     document.getElementById('i-shoot').value = joyState.shoot;
     document.getElementById('btn-shoot').classList.toggle('active', joyState.shoot);
+    // Joystick atac: vizibil si activ doar cand Trage e on
+    const atkWrap = document.getElementById('joy-atk-wrap');
+    const atkVals = document.getElementById('joy-atk-vals');
+    if (atkWrap) atkWrap.style.opacity = joyState.shoot ? '1' : '0.35';
+    if (atkVals) atkVals.textContent = joyState.shoot ? `Dir: ${joyState.atk.dir}°` : 'activează Trage mai întâi';
     if (gameActive && !inputSubmitted) renderStatic();
   });
 
