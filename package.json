@@ -1,0 +1,13 @@
+{
+  "name": "space-deathmatch-online",
+  "version": "1.0.0",
+  "description": "Space Deathmatch - multiplayer online",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "express": "^4.18.2"
+  }
+}
