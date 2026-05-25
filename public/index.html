@@ -70,6 +70,11 @@ input[type=checkbox]{width:14px;height:14px;cursor:pointer;}
 <div id="screen-lobby">
   <div class="lobby-title">🚀 Space Deathmatch</div>
   <div class="lobby-sub" id="conn-status">Se conectează...</div>
+  <div class="lobby-section" style="text-align:center;">
+    <div class="section-title">Trimite acest link prietenilor</div>
+    <div id="room-link" style="font-size:12px;color:#7ab8f5;word-break:break-all;margin-bottom:10px;padding:6px;background:#111;border-radius:6px;">se generează...</div>
+    <button id="btn-copy-link" style="padding:8px 20px;border-radius:6px;background:#1a3a5c;color:#7ab8f5;border:0.5px solid #4a90d9;cursor:pointer;font-size:13px;">📋 Copiază linkul</button>
+  </div>
 
   <div class="lobby-section">
     <div class="section-title">Numele tău</div>
@@ -144,7 +149,18 @@ const MOVE_DUR=2000,MAX_DUR=7000;
 // ══════════════════════════════════════════
 //  WEBSOCKET
 // ══════════════════════════════════════════
-const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.hostname+(location.port?':'+location.port:'');
+// Generam sau luam codul camerei din URL
+function getRoomCode(){
+  const params=new URLSearchParams(location.search);
+  if(params.get('room'))return params.get('room');
+  // Generam cod nou random
+  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+  const newUrl=location.origin+location.pathname+'?room='+code;
+  window.history.replaceState({},'',newUrl);
+  return code;
+}
+const ROOM_CODE=getRoomCode();
+const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.hostname+(location.port?':'+location.port:'')+('/?room='+ROOM_CODE);
 let ws,myId,myNum;
 let roomPlayers={}; // id -> {id,name,shipType,ready,hasMove}
 let myIsReady=false;
@@ -165,6 +181,10 @@ function handleMsg(msg){
     case 'welcome':
       myId=msg.playerId; myNum=msg.playerNum;
       document.getElementById('player-name').value='Jucător '+myNum;
+      // Afisam linkul camerei
+      const roomLink=location.origin+location.pathname+'?room='+ROOM_CODE;
+      const rlEl=document.getElementById('room-link');
+      if(rlEl)rlEl.textContent=roomLink;
       break;
     case 'room_state':
       roomPlayers={};
@@ -641,6 +661,14 @@ function spawnAoe(x,y){const c=['#ff6600','#ffaa00','#ffff00','#ff3300','#fff'];
 // ── INIT ──
 buildShipGrid();
 connect();
+document.getElementById('btn-copy-link').addEventListener('click',()=>{
+  const link=document.getElementById('room-link').textContent;
+  navigator.clipboard.writeText(link).then(()=>{
+    const btn=document.getElementById('btn-copy-link');
+    btn.textContent='✅ Copiat!';
+    setTimeout(()=>btn.textContent='📋 Copiază linkul',2000);
+  });
+});
 </script>
 </body>
 </html>
