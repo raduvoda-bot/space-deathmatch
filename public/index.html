@@ -179,7 +179,9 @@ function getRoomCode(){
   return code;
 }
 const ROOM_CODE=getRoomCode();
-const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.hostname+(location.port?':'+location.port:'')+('/?room='+ROOM_CODE);
+const _host=location.hostname||(typeof window!=='undefined'?'localhost':'localhost');
+const _port=location.port?':'+location.port:'';
+const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+_host+_port+'/?room='+ROOM_CODE;
 let ws,myId,myNum;
 let roomPlayers={}; // id -> {id,name,shipType,ready,hasMove}
 let myIsReady=false;
