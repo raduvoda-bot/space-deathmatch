@@ -381,12 +381,9 @@ function updateSpecialBadge(){
 function showInputPhase(){
   inputSubmitted=false;
   // Reset joystick state
-  joyState.shoot=false; joyState.special=false;
+  joyState.shoot=true; joyState.special=false;
   joyState.move={dir:0,spd:0}; joyState.atk={dir:0};
-  const bsh=document.getElementById('btn-shoot');if(bsh)bsh.classList.remove('active');
   const bsp=document.getElementById('btn-special');if(bsp)bsp.classList.remove('active');
-  const aw=document.getElementById('joy-atk-wrap');if(aw)aw.style.opacity='0.35';
-  const av=document.getElementById('joy-atk-vals');if(av)av.textContent='activează Trage mai întâi';
   document.getElementById('btn-submit').disabled=false;
   document.getElementById('input-panel').style.display='block';
   document.getElementById('waiting-banner').style.display='none';
@@ -409,17 +406,7 @@ function showWaitingPhase(){
   document.getElementById('waiting-banner').style.display='block';
 }
 
-document.getElementById('btn-submit').addEventListener('click',()=>{
-  if(inputSubmitted)return;
-  const s=myShipIndex>=0?ships[myShipIndex]:null;
-  if(!s||!s.alive)return;
-  const move = getInputValues();
-  if(move.special)mySpecialUsed=true;
-  inputSubmitted=true;
-  send({type:'submit_move',move});
-  showWaitingPhase();
-  updateSpecialBadge();
-});
+// btn-submit handled in initJoysticks
 
 // ══════════════════════════════════════════
 //  JOYSTICK LOGIC
@@ -506,6 +493,9 @@ function setupJoystick(canvasId, onUpdate) {
 }
 
 function initJoysticks() {
+  // Shoot e mereu true — tragem implicit
+  joyState.shoot = true;
+
   setupJoystick('joy-move', (deg, pct) => {
     const s = myShipIndex >= 0 ? ships[myShipIndex] : null;
     const maxSpd = s ? s.maxSpd : 80;
@@ -514,7 +504,7 @@ function initJoysticks() {
     document.getElementById('i-dir').value = joyState.move.dir;
     document.getElementById('i-spd').value = joyState.move.spd;
     const valsEl = document.getElementById('joy-move-vals');
-    if (valsEl) valsEl.textContent = pct > 0.05 ? `Dir: ${joyState.move.dir}° | Vit: ${joyState.move.spd}` : '↕ trage pentru direcție';
+    if (valsEl) valsEl.textContent = pct > 0.05 ? `${joyState.move.dir}° / ${joyState.move.spd}` : '↕ direcție & viteză';
     if (gameActive && !inputSubmitted) renderStatic();
   });
 
@@ -523,31 +513,42 @@ function initJoysticks() {
     document.getElementById('i-adir').value = joyState.atk.dir;
     document.getElementById('i-sdir').value = joyState.atk.dir;
     const valsEl = document.getElementById('joy-atk-vals');
-    if (valsEl) valsEl.textContent = `Dir: ${joyState.atk.dir}°`;
-    if (gameActive && !inputSubmitted) renderStatic();
-  });
-
-  // Shoot button — toggle, activeaza/dezactiveaza joystick atac
-  document.getElementById('btn-shoot').addEventListener('click', () => {
-    joyState.shoot = !joyState.shoot;
-    document.getElementById('i-shoot').value = joyState.shoot;
-    document.getElementById('btn-shoot').classList.toggle('active', joyState.shoot);
-    // Joystick atac: vizibil si activ doar cand Trage e on
-    const atkWrap = document.getElementById('joy-atk-wrap');
-    const atkVals = document.getElementById('joy-atk-vals');
-    if (atkWrap) atkWrap.style.opacity = joyState.shoot ? '1' : '0.35';
-    if (atkVals) atkVals.textContent = joyState.shoot ? `Dir: ${joyState.atk.dir}°` : 'activează Trage mai întâi';
+    if (valsEl) valsEl.textContent = `${joyState.atk.dir}°`;
     if (gameActive && !inputSubmitted) renderStatic();
   });
 
   // Special button
-  document.getElementById('btn-special').addEventListener('click', () => {
-    if (mySpecialUsed) return;
-    joyState.special = !joyState.special;
-    document.getElementById('i-special').value = joyState.special;
-    document.getElementById('btn-special').classList.toggle('active', joyState.special);
-    if (gameActive && !inputSubmitted) renderStatic();
-  });
+  const spBtn = document.getElementById('btn-special');
+  if (spBtn) {
+    // Remove old listeners by cloning
+    const newSpBtn = spBtn.cloneNode(true);
+    spBtn.parentNode.replaceChild(newSpBtn, spBtn);
+    newSpBtn.addEventListener('click', () => {
+      if (mySpecialUsed) return;
+      joyState.special = !joyState.special;
+      document.getElementById('i-special').value = joyState.special;
+      newSpBtn.classList.toggle('active', joyState.special);
+      if (gameActive && !inputSubmitted) renderStatic();
+    });
+  }
+
+  // Submit button
+  const subBtn = document.getElementById('btn-submit');
+  if (subBtn) {
+    const newSubBtn = subBtn.cloneNode(true);
+    subBtn.parentNode.replaceChild(newSubBtn, subBtn);
+    newSubBtn.addEventListener('click', () => {
+      if (inputSubmitted) return;
+      const s = myShipIndex >= 0 ? ships[myShipIndex] : null;
+      if (!s || !s.alive) return;
+      const move = getInputValues();
+      if (move.special) mySpecialUsed = true;
+      inputSubmitted = true;
+      send({type:'submit_move', move});
+      showWaitingPhase();
+      updateSpecialBadge();
+    });
+  }
 }
 
 // Override getInputValues to read from joyState instead of sliders
