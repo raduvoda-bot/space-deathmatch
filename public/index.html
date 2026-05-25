@@ -144,7 +144,7 @@ const MOVE_DUR=2000,MAX_DUR=7000;
 // ══════════════════════════════════════════
 //  WEBSOCKET
 // ══════════════════════════════════════════
-const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.host;
+const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.hostname+(location.port?':'+location.port:'');
 let ws,myId,myNum;
 let roomPlayers={}; // id -> {id,name,shipType,ready,hasMove}
 let myIsReady=false;
@@ -258,8 +258,11 @@ document.getElementById('player-name').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const name=e.target.value.trim()||'Jucător';send({type:'set_name',name});}
 });
 document.getElementById('btn-ready').addEventListener('click',()=>{
+  if(!myShipType){alert('Selectează o navă mai întâi!');return;}
   myIsReady=!myIsReady;
-  send({type:'set_ready',ready:myIsReady});
+  // Trimitem si nava selectata impreuna cu ready — garantat ca serverul o are
+  send({type:'select_ship',shipType:myShipType});
+  setTimeout(()=>send({type:'set_ready',ready:myIsReady}),100);
 });
 
 // ══════════════════════════════════════════
