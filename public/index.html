@@ -104,19 +104,36 @@ input[type=checkbox]{width:14px;height:14px;cursor:pointer;}
     <div id="waiting-banner">⏳ Așteptăm mișcările celorlalți jucători...</div>
     <div id="input-panel">
       <div class="panel-title" id="panel-title">—</div>
-      <div class="sub-panel">
-        <div class="sub-panel-title">Mișcare</div>
-        <div class="ctrl-row"><label>Direcție</label><input type="range" id="i-dir" min="0" max="359" value="0"><span id="i-dir-v">0°</span></div>
-        <div class="ctrl-row"><label>Viteză</label><input type="range" id="i-spd" min="0" max="80" value="30"><span id="i-spd-v">30</span></div>
+      <!-- JOYSTICK UI -->
+      <div id="joystick-area">
+        <div class="joy-section">
+          <div class="joy-label">MIȘCARE</div>
+          <div class="joy-wrap">
+            <canvas id="joy-move" width="130" height="130"></canvas>
+          </div>
+          <div class="joy-vals" id="joy-move-vals">Dir: 0° | Vit: 0</div>
+        </div>
+        <div class="joy-buttons">
+          <div class="panel-title" id="panel-title-mini" style="font-size:11px;margin-bottom:8px;text-align:center;">—</div>
+          <button id="btn-shoot" class="joy-btn">🎯 Trage</button>
+          <button id="btn-special" class="joy-btn special-btn">⚡ Special <span class="badge" id="special-badge">1×</span></button>
+          <button id="btn-submit" class="joy-btn confirm-btn">✓ Confirmă</button>
+        </div>
+        <div class="joy-section">
+          <div class="joy-label">ATAC</div>
+          <div class="joy-wrap">
+            <canvas id="joy-atk" width="130" height="130"></canvas>
+          </div>
+          <div class="joy-vals" id="joy-atk-vals">Dir: 0°</div>
+        </div>
       </div>
-      <div class="sub-panel">
-        <div class="sub-panel-title" id="atk-title">Atac</div>
-        <div class="check-row"><input type="checkbox" id="i-shoot"><label for="i-shoot" id="i-shoot-lbl">Atac</label></div>
-        <div class="ctrl-row" id="i-adir-row" style="opacity:0.4"><label id="i-adir-lbl">Direcție</label><input type="range" id="i-adir" min="0" max="359" value="0"><span id="i-adir-v">0°</span></div>
-        <div class="check-row"><input type="checkbox" id="i-special"><label for="i-special" id="i-special-lbl">Special</label><span class="badge" id="special-badge">1×</span></div>
-        <div class="ctrl-row" id="i-sdir-row" style="opacity:0.4"><label>Direcție special</label><input type="range" id="i-sdir" min="0" max="359" value="0"><span id="i-sdir-v">0°</span></div>
-      </div>
-      <button id="btn-submit">Trimite mișcarea ➜</button>
+      <!-- hidden inputs pastrate pentru compatibilitate cu logica existenta -->
+      <input type="hidden" id="i-dir" value="0">
+      <input type="hidden" id="i-spd" value="0">
+      <input type="hidden" id="i-shoot" value="false">
+      <input type="hidden" id="i-adir" value="0">
+      <input type="hidden" id="i-special" value="false">
+      <input type="hidden" id="i-sdir" value="0">
     </div>
   </div>
   <canvas id="arena" width="700" height="440"></canvas>
@@ -280,7 +297,6 @@ document.getElementById('player-name').addEventListener('keydown',e=>{
 document.getElementById('btn-ready').addEventListener('click',()=>{
   if(!myShipType){alert('Selectează o navă mai întâi!');return;}
   myIsReady=!myIsReady;
-  // Trimitem si nava selectata impreuna cu ready — garantat ca serverul o are
   send({type:'select_ship',shipType:myShipType});
   setTimeout(()=>send({type:'set_ready',ready:myIsReady}),100);
 });
@@ -323,6 +339,7 @@ function startGameClient(msg){
   myShipIndex=ships.findIndex(s=>s.id===myId);
   currentTurn=1;
   setupInputPanel();
+  initJoysticks();
   showInputPhase();
   renderStatic();
 }
@@ -347,29 +364,37 @@ function setupInputPanel(){
 
 function updateSpecialBadge(){
   const badge=document.getElementById('special-badge');
-  const spEl=document.getElementById('i-special');
-  if(mySpecialUsed){badge.textContent='Folosit';badge.className='badge used';spEl.disabled=true;spEl.checked=false;}
-  else{badge.textContent='1×';badge.className='badge';spEl.disabled=false;}
+  const spBtn=document.getElementById('btn-special');
+  if(mySpecialUsed){
+    badge.textContent='Folosit';badge.className='badge used';
+    if(spBtn){spBtn.disabled=true;spBtn.classList.remove('active');}
+  } else {
+    badge.textContent='1×';badge.className='badge';
+    if(spBtn)spBtn.disabled=false;
+  }
 }
 
 function showInputPhase(){
   inputSubmitted=false;
-  document.getElementById('phase-banner').textContent=`Tura ${currentTurn} — Introdu mișcarea ta`;
-  document.getElementById('phase-banner').style.color=myShipIndex>=0?ships[myShipIndex].color:'#fff';
+  // Reset joystick state
+  joyState.shoot=false; joyState.special=false;
+  joyState.move={dir:0,spd:0,active:false}; joyState.atk={dir:0,active:false};
+  document.getElementById('btn-shoot').classList.remove('active');
+  document.getElementById('btn-special').classList.remove('active');
+  document.getElementById('btn-submit').disabled=false;
   document.getElementById('input-panel').style.display='block';
   document.getElementById('waiting-banner').style.display='none';
-  document.getElementById('btn-submit').disabled=false;
-  // Reset inputs
-  ['i-dir','i-adir','i-sdir'].forEach(id=>{document.getElementById(id).value=0;document.getElementById(id+'-v').textContent='0°';});
-  document.getElementById('i-shoot').checked=false;
-  document.getElementById('i-special').checked=false;
-  document.getElementById('i-adir-row').style.opacity='0.4';
-  document.getElementById('i-sdir-row').style.opacity='0.4';
-  // Update panel cu HP curent
+  document.getElementById('phase-banner').textContent=`Tura ${currentTurn} — Introdu mișcarea ta`;
+  document.getElementById('phase-banner').style.color=myShipIndex>=0?ships[myShipIndex].color:'#fff';
   if(myShipIndex>=0){
     const s=ships[myShipIndex];
+    const mini=document.getElementById('panel-title-mini');
+    if(mini)mini.textContent=`${s.name} — HP: ${Math.round(s.hp)}/${s.maxHp}`;
+    mini.style.color=s.color;
     document.getElementById('panel-title').textContent=`${s.name} — HP: ${Math.round(s.hp)}/${s.maxHp}`;
   }
+  // Reinitializam joystick-urile
+  initJoysticks();
 }
 
 function showWaitingPhase(){
@@ -382,29 +407,145 @@ document.getElementById('btn-submit').addEventListener('click',()=>{
   if(inputSubmitted)return;
   const s=myShipIndex>=0?ships[myShipIndex]:null;
   if(!s||!s.alive)return;
-  const specialChecked=document.getElementById('i-special').checked&&!mySpecialUsed;
-  let spd=parseFloat(document.getElementById('i-spd').value);
-  if(specialChecked&&s.type==='COR')spd=Math.min(spd*2,s.maxSpd*2);
-  const move={
-    dir:parseFloat(document.getElementById('i-dir').value),spd,
-    shoot:document.getElementById('i-shoot').checked,
-    adir:parseFloat(document.getElementById('i-adir').value),
-    special:specialChecked,
-    sdir:parseFloat(document.getElementById('i-sdir').value),
-    speedBoosted:specialChecked&&s.type==='COR',
-  };
-  if(specialChecked)mySpecialUsed=true;
+  const move = getInputValues();
+  if(move.special)mySpecialUsed=true;
   inputSubmitted=true;
   send({type:'submit_move',move});
   showWaitingPhase();
   updateSpecialBadge();
 });
 
-// Input listeners
-['i-dir','i-adir','i-sdir'].forEach(id=>{document.getElementById(id).addEventListener('input',e=>{document.getElementById(id+'-v').textContent=e.target.value+'°';if(gameActive&&!inputSubmitted)renderStatic();});});
-document.getElementById('i-spd').addEventListener('input',e=>{document.getElementById('i-spd-v').textContent=e.target.value;if(gameActive&&!inputSubmitted)renderStatic();});
-document.getElementById('i-shoot').addEventListener('change',e=>{document.getElementById('i-adir-row').style.opacity=e.target.checked?'1':'0.4';if(gameActive&&!inputSubmitted)renderStatic();});
-document.getElementById('i-special').addEventListener('change',e=>{document.getElementById('i-sdir-row').style.opacity=e.target.checked?'1':'0.4';if(gameActive&&!inputSubmitted)renderStatic();});
+// ══════════════════════════════════════════
+//  JOYSTICK LOGIC
+// ══════════════════════════════════════════
+const joyState = {
+  move: { dir: 0, spd: 0, active: false },
+  atk:  { dir: 0, active: false },
+  shoot: false,
+  special: false,
+};
+
+function setupJoystick(canvasId, onUpdate, opts={}) {
+  const cv = document.getElementById(canvasId);
+  if (!cv) return;
+  const cx = cv.width/2, cy = cv.height/2;
+  const maxR = cv.width/2 - 10;
+  let touching = false, kx = cx, ky = cy;
+
+  function draw(nx, ny) {
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, cv.width, cv.height);
+    // Outer ring
+    c.beginPath(); c.arc(cx, cy, maxR, 0, Math.PI*2);
+    c.strokeStyle = 'rgba(100,160,255,0.3)'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = 'rgba(20,40,80,0.5)'; c.fill();
+    // Direction line
+    if (touching) {
+      c.beginPath(); c.moveTo(cx, cy); c.lineTo(nx, ny);
+      c.strokeStyle = 'rgba(100,180,255,0.5)'; c.lineWidth = 1.5; c.stroke();
+    }
+    // Knob
+    c.beginPath(); c.arc(nx, ny, 18, 0, Math.PI*2);
+    c.fillStyle = touching ? 'rgba(80,160,255,0.9)' : 'rgba(60,100,180,0.7)';
+    c.fill();
+    c.beginPath(); c.arc(nx, ny, 10, 0, Math.PI*2);
+    c.fillStyle = 'rgba(180,220,255,0.6)'; c.fill();
+  }
+
+  function getPos(e) {
+    const r = cv.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+
+  function update(x, y) {
+    const dx = x - cx, dy = y - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const clamped = Math.min(dist, maxR);
+    const angle = Math.atan2(dy, dx);
+    kx = cx + Math.cos(angle) * clamped;
+    ky = cy + Math.sin(angle) * clamped;
+    const pct = clamped / maxR;
+    const deg = ((angle * 180 / Math.PI) + 360) % 360;
+    draw(kx, ky);
+    onUpdate(deg, pct, true);
+  }
+
+  function reset() {
+    touching = false; kx = cx; ky = cy;
+    draw(cx, cy);
+    onUpdate(0, 0, false);
+  }
+
+  draw(cx, cy);
+
+  cv.addEventListener('touchstart', e => { e.preventDefault(); touching = true; update(getPos(e).x, getPos(e).y); }, {passive:false});
+  cv.addEventListener('touchmove',  e => { e.preventDefault(); if(touching) update(getPos(e).x, getPos(e).y); }, {passive:false});
+  cv.addEventListener('touchend',   e => { e.preventDefault(); reset(); }, {passive:false});
+  cv.addEventListener('mousedown',  e => { touching = true; update(getPos(e).x, getPos(e).y); });
+  cv.addEventListener('mousemove',  e => { if(touching) update(getPos(e).x, getPos(e).y); });
+  cv.addEventListener('mouseup',    () => reset());
+  cv.addEventListener('mouseleave', () => { if(touching) reset(); });
+}
+
+function initJoysticks() {
+  setupJoystick('joy-move', (deg, pct, active) => {
+    const s = myShipIndex >= 0 ? ships[myShipIndex] : null;
+    const maxSpd = s ? s.maxSpd : 80;
+    joyState.move.dir = Math.round(deg);
+    joyState.move.spd = Math.round(pct * maxSpd);
+    joyState.move.active = active;
+    document.getElementById('i-dir').value = joyState.move.dir;
+    document.getElementById('i-spd').value = joyState.move.spd;
+    const valsEl = document.getElementById('joy-move-vals');
+    if (valsEl) valsEl.textContent = active ? `Dir: ${joyState.move.dir}° | Vit: ${joyState.move.spd}` : 'Trage pentru a seta';
+    if (gameActive && !inputSubmitted) renderStatic();
+  });
+
+  setupJoystick('joy-atk', (deg, pct, active) => {
+    joyState.atk.dir = Math.round(deg);
+    joyState.atk.active = active;
+    document.getElementById('i-adir').value = joyState.atk.dir;
+    document.getElementById('i-sdir').value = joyState.atk.dir;
+    const valsEl = document.getElementById('joy-atk-vals');
+    if (valsEl) valsEl.textContent = active ? `Dir: ${joyState.atk.dir}°` : 'Trage pentru a viza';
+    if (gameActive && !inputSubmitted) renderStatic();
+  });
+
+  // Shoot button
+  document.getElementById('btn-shoot').addEventListener('click', () => {
+    joyState.shoot = !joyState.shoot;
+    document.getElementById('i-shoot').value = joyState.shoot;
+    document.getElementById('btn-shoot').classList.toggle('active', joyState.shoot);
+    if (gameActive && !inputSubmitted) renderStatic();
+  });
+
+  // Special button
+  document.getElementById('btn-special').addEventListener('click', () => {
+    if (mySpecialUsed) return;
+    joyState.special = !joyState.special;
+    document.getElementById('i-special').value = joyState.special;
+    document.getElementById('btn-special').classList.toggle('active', joyState.special);
+    if (gameActive && !inputSubmitted) renderStatic();
+  });
+}
+
+// Override getInputValues to read from joyState instead of sliders
+function getInputValues() {
+  const s = myShipIndex >= 0 ? ships[myShipIndex] : null;
+  const specialChecked = joyState.special && !mySpecialUsed;
+  let spd = joyState.move.spd;
+  if (specialChecked && s && s.type === 'COR') spd = Math.min(spd * 2, s.maxSpd * 2);
+  return {
+    dir: joyState.move.dir,
+    spd,
+    shoot: joyState.shoot,
+    adir: joyState.atk.dir,
+    special: specialChecked,
+    sdir: joyState.atk.dir,
+    speedBoosted: specialChecked && s && s.type === 'COR',
+  };
+}
 
 // ══════════════════════════════════════════
 //  EXECUTE TURN (primit de la server)
@@ -577,16 +718,16 @@ function renderStatic(){
   if(myShipIndex>=0&&!inputSubmitted){
     const s=ships[myShipIndex];
     if(!s.alive)return;
-    const dir=parseFloat(document.getElementById('i-dir').value);
-    let spd=parseFloat(document.getElementById('i-spd').value);
-    const specialOn=document.getElementById('i-special').checked&&!mySpecialUsed;
+    const dir=joyState.move.dir;
+    let spd=joyState.move.spd;
+    const specialOn=joyState.special&&!mySpecialUsed;
     if(specialOn&&s.type==='COR')spd*=2;
     if(spd>1){
       const rad=dir*Math.PI/180,ex=Math.max(ARENA.x1+2,Math.min(ARENA.x2-2,s.x+Math.cos(rad)*spd)),ey=Math.max(ARENA.y1+2,Math.min(ARENA.y2-2,s.y+Math.sin(rad)*spd));
       ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle=(specialOn&&s.type==='COR')?'rgba(255,220,80,0.9)':s.color+'99';ctx.lineWidth=(specialOn&&s.type==='COR')?2.5:1.5;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(ex,ey,specialOn&&s.type==='COR'?5:3,0,Math.PI*2);ctx.fillStyle=(specialOn&&s.type==='COR')?'#ffe080':s.color;ctx.fill();ctx.restore();
     }
-    if(document.getElementById('i-shoot').checked){
-      const adir=parseFloat(document.getElementById('i-adir').value),rad=adir*Math.PI/180;
+    if(joyState.shoot){
+      const adir=joyState.atk.dir,rad=adir*Math.PI/180;
       if(s.type==='BC'){ctx.save();ctx.setLineDash([6,4]);ctx.strokeStyle='rgba(80,180,255,0.6)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(s.x+Math.cos(rad)*800,s.y+Math.sin(rad)*800);ctx.stroke();ctx.setLineDash([]);ctx.restore();}
       else{ctx.save();ctx.setLineDash([3,5]);ctx.strokeStyle=s.color+'88';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(s.x+Math.cos(rad)*120,s.y+Math.sin(rad)*120);ctx.stroke();ctx.setLineDash([]);ctx.restore();}
     }
