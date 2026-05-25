@@ -7,7 +7,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#050a18;font-family:system-ui,sans-serif;color:#fff;min-height:100vh;}
-#app{max-width:760px;margin:0 auto;padding:12px;}
+#app{max-width:720px;margin:0 auto;padding:8px;}
 
 /* ── LOBBY ── */
 #screen-lobby{display:flex;flex-direction:column;gap:16px;padding-top:24px;}
@@ -310,7 +310,7 @@ document.getElementById('btn-ready').addEventListener('click',()=>{
 // ══════════════════════════════════════════
 const canvas=document.getElementById('arena');
 const ctx=canvas.getContext('2d');
-const W=canvas.width,H=canvas.height;
+const W=canvas.width,H=canvas.height; // canvas e 500x400 in portrait layout
 
 let gameActive=false;
 let ships=[];         // array de nave in joc
